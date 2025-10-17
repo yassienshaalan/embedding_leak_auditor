@@ -1,7 +1,7 @@
 from typing import List, Tuple
 from datasets import load_dataset
 import numpy as np
-
+from datasets import load_dataset as hf_load_dataset
 def load_ag_news(corpus_size=1500, query_size=300, seed=123) -> Tuple[List[str], List[str]]:
     ds = load_dataset("ag_news")
     texts = [x["text"] for x in ds["train"]]
@@ -11,9 +11,43 @@ def load_ag_news(corpus_size=1500, query_size=300, seed=123) -> Tuple[List[str],
     return corpus, queries
 
 def load_pubmed_rct(corpus_size=1500, query_size=300, seed=123) -> Tuple[List[str], List[str]]:
-    ds = load_dataset("pubmed_rct", "pubmed_rct")
-    texts = [x["abstract"] for x in ds["train"] if x.get("abstract")]
-    rng = np.random.default_rng(seed); idx = rng.permutation(len(texts))
+    """
+    Compatibility loader: we keep the function name `load_pubmed_rct` so the rest
+    of your pipeline/CLI doesn't change, but we use a biomedical dataset that is
+    actually available on the Hugging Face Hub.
+
+    Primary: pubmed_qa (pqa_labeled)  -> use 'context' or 'long_answer'
+    Fallback: pubmed_qa (pqa_unlabeled)-> use 'context' or 'question'
+    """
+    try:
+        ds = hf_load_dataset("pubmed_qa", "pqa_labeled")
+        texts = []
+        for ex in ds["train"]:
+            # Prefer the longer field if present
+            t = (ex.get("context") or ex.get("long_answer") or ex.get("question"))
+            if t:
+                texts.append(t)
+        if len(texts) < (corpus_size + query_size):
+            # Try validation and test splits to bulk up
+            for split in ("validation", "test"):
+                if split in ds:
+                    for ex in ds[split]:
+                        t = (ex.get("context") or ex.get("long_answer") or ex.get("question"))
+                        if t:
+                            texts.append(t)
+    except Exception:
+        # Fallback: unlabeled split
+        ds = hf_load_dataset("pubmed_qa", "pqa_unlabeled")
+        texts = []
+        for ex in ds["train"]:
+            t = (ex.get("context") or ex.get("question"))
+            if t:
+                texts.append(t)
+
+    # Basic cleaning & sampling
+    texts = [t.strip() for t in texts if t and len(t) > 20]
+    rng = np.random.default_rng(seed)
+    idx = rng.permutation(len(texts))
     corpus = [texts[i] for i in idx[:corpus_size]]
     queries = [texts[i] for i in idx[corpus_size:corpus_size+query_size]]
     return corpus, queries
