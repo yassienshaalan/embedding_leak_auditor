@@ -50,15 +50,42 @@ class LeakAuditor:
                 rows.append({"sigma":s,"qbits":qb, **m})
         return rows
 
-    def cosine_hist_plot(self, sim: np.ndarray, labels_present: List[bool], out_path: str):
+    def cosine_hist_plot(self, sim: np.ndarray, labels_present: list, out_path: str):
+        import numpy as np
+        import matplotlib.pyplot as plt
+
         max_cos = sim.max(axis=1)
-        present = [max_cos[i] for i,f in enumerate(labels_present) if f]
-        absent  = [max_cos[i] for i,f in enumerate(labels_present) if not f]
-        plt.figure(figsize=(6,4))
-        plt.hist(present, bins=30, alpha=0.6, density=True, label="Present")
-        plt.hist(absent,  bins=30, alpha=0.6, density=True, label="Absent")
-        plt.xlabel("Max cosine to corpus"); plt.ylabel("Density"); plt.legend(); plt.title("Cosine separation")
-        plt.savefig(out_path, bbox_inches="tight", dpi=200); plt.close()
+        present = np.array([max_cos[i] for i, flag in enumerate(labels_present) if flag], dtype=float)
+        absent  = np.array([max_cos[i] for i, flag in enumerate(labels_present) if not flag], dtype=float)
+
+        plt.figure(figsize=(6, 4))
+
+        def plot_group(data: np.ndarray, label: str):
+            if data.size == 0:
+                return
+            lo = float(np.nanmin(data))
+            hi = float(np.nanmax(data))
+            # Guard against zero or tiny range
+            if not np.isfinite(lo) or not np.isfinite(hi):
+                return
+            if hi - lo < 1e-6:
+                pad = 1e-3
+                lo -= pad
+                hi += pad
+            # Choose a sensible bin count for small samples
+            bins = max(1, min(30, int(np.ceil(np.sqrt(data.size)))))
+            plt.hist(data, bins=bins, range=(lo, hi), alpha=0.6, density=True, label=label)
+
+        plot_group(present, "Present")
+        plot_group(absent, "Absent")
+
+        plt.xlabel("Max cosine to corpus")
+        plt.ylabel("Density")
+        plt.title("Cosine separation")
+        plt.legend()
+        plt.savefig(out_path, bbox_inches="tight", dpi=200)
+        plt.close()
+
 
     def line_plot(self, xs, ys_dict: Dict[str, List[float]], xlabel, ylabel, title, out_path):
         plt.figure(figsize=(6,4))
