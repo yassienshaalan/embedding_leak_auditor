@@ -1,4 +1,4 @@
-# Embedding Leak Auditor (ELA) — Minimal VM Runner
+# Embedding Leak Auditor (ELA)
 
 This runs an embedding leakage audit on:
 - **AG News** (`ag_news`)
