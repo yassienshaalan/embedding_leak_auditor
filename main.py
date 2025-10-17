@@ -1,18 +1,19 @@
-import argparse, os, numpy as np, importlib.util, pathlib
+import argparse, os, numpy as np
 from utils import ensure_dir, safe_write_csv, cosine_sim_matrix, topk_indices
 from auditor import LeakAuditor
 
-# Import our dataset helper explicitly (filename conflicts with HF 'datasets')
-helper_path = pathlib.Path(__file__).with_name("datasets.py")
-spec = importlib.util.spec_from_file_location("ela_datasets", helper_path)
-ela_datasets = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(ela_datasets)
+from ela_datasets import (
+    load_ag_news,
+    load_pubmed_rct,
+    load_financial_phrasebank,
+    external_queries_for,
+)
 
 def get_loader(name):
     return {
-        "ag_news": ela_datasets.load_ag_news,
-        "pubmed_rct": ela_datasets.load_pubmed_rct,
-        "financial_phrasebank": ela_datasets.load_financial_phrasebank,
+        "ag_news": load_ag_news,
+        "pubmed_rct": load_pubmed_rct,
+        "financial_phrasebank": load_financial_phrasebank,
     }[name]
 
 def run_one(name: str, args):
