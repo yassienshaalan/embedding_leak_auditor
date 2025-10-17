@@ -111,10 +111,9 @@ def run_one(name: str, args):
             queries_emb=queries_emb,
             prefix_len=args.prefix_len,
             epochs=args.inv_epochs,
-            bs=args.inv_batch,                 
+            bs=args.inv_batch,
             lm_name=args.lm_name,
-            max_len=args.inv_max_len,
-            train_cap=args.inv_train_cap      
+            max_len=args.inv_max_len
         )
 
         safe_write_csv(os.path.join(out_dir, "metrics_inversion_gpt2.csv"),

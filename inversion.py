@@ -150,10 +150,10 @@ def train_prefix_decoder(
     embed_dim=384,
     prefix_len=64,
     epochs=8,
-    bs=16,                 
+    bs=16,                 # smaller default
     lr=1e-3,
     max_len=64,
-    train_cap=1200         
+    train_cap=1200         # NEW: limit training set
 ):
     from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -174,4 +174,23 @@ def train_prefix_decoder(
     N = min(train_cap, len(corpus_texts), len(corpus_vecs))
     ds = InvDataset(corpus_texts[:N], corpus_vecs[:N], model.tok, max_len=max_len)
     dl = DataLoader(ds, batch_size=bs, shuffle=True, drop_last=True)
-    ...
+
+    optim = torch.optim.AdamW(model.parameters(), lr=lr)
+    steps = epochs * max(1, len(dl))
+    sched = get_cosine_schedule_with_warmup(optim, num_warmup_steps=max(1, steps//20), num_training_steps=steps)
+
+    model.train()
+    for ep in range(epochs):
+        tot = 0.0
+        for batch in dl:
+            ids = batch["ids"].to(DEVICE)
+            e = batch["e"].to(DEVICE)
+            loss = model(e, ids)
+            optim.zero_grad(set_to_none=True)
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optim.step(); sched.step()
+            tot += float(loss.detach().cpu())
+        print(f"[INV] epoch {ep+1}/{epochs}  loss={tot/len(dl):.4f}")
+    model.eval()
+    return model
