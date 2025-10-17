@@ -47,19 +47,35 @@ class PrefixDecoder(nn.Module):
 
     def forward(self, evecs: torch.Tensor, labels_ids: torch.Tensor):
         """
-        Teacher-forced LM loss conditioned on prefix.
-        labels_ids: token ids for target text (padded); returns CE loss.
+        Teacher-forced LM loss conditioned on a learned prefix.
+
+        labels_ids: [B, L] token ids of the target text (padded).
+        We predict the next token for each of the L-1 positions of the target,
+        ignoring the learned prefix in the loss.
         """
-        B = evecs.size(0)
-        prefix = self.make_prefix(evecs)                             # [B,P,H]
-        tgt_emb = self.lm.transformer.wte(labels_ids)                # [B,L,H]
-        inputs_embeds = torch.cat([prefix, tgt_emb[:, :-1, :]], 1)   # shift
+        B, L = labels_ids.size()
+
+        # 1) Map embedding -> prefix token embeddings  [B, P, H]
+        prefix = self.make_prefix(evecs)
+
+        # 2) Shift targets right by one (standard LM training)
+        #    Input to LM is prefix + target[:, :-1]
+        tgt_in  = labels_ids[:, :-1]                       # [B, L-1]
+        tgt_emb = self.lm.transformer.wte(tgt_in)          # [B, L-1, H]
+        inputs_embeds = torch.cat([prefix, tgt_emb], dim=1)# [B, P+L-1, H]
+
+        # 3) Run LM
         attn_mask = torch.ones(inputs_embeds.size()[:-1], device=evecs.device)
         out = self.lm(inputs_embeds=inputs_embeds, attention_mask=attn_mask)
-        # compute loss on next-token prediction for tgt sequence only
-        logits = out.logits[:, self.prefix_len-1:-1, :]              # align
+
+        # 4) Align logits to the next-token targets for the target tokens only
+        #    Take the last (L-1) positions (the ones corresponding to tgt_in)
+        logits  = out.logits[:, -(L-1):, :]                # [B, L-1, V]
+        targets = labels_ids[:, 1:]                        # [B, L-1]
+
+        # 5) Cross-entropy over the flattened positions (pad masked)
         loss_fn = nn.CrossEntropyLoss(ignore_index=self.tok.pad_token_id)
-        loss = loss_fn(logits.reshape(-1, logits.size(-1)), labels_ids.reshape(-1))
+        loss = loss_fn(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
         return loss
 
     @torch.no_grad()
