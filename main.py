@@ -111,10 +111,12 @@ def run_one(name: str, args):
             queries_emb=queries_emb,
             prefix_len=args.prefix_len,
             epochs=args.inv_epochs,
-            bs=64,
+            bs=args.inv_batch,                 
             lm_name=args.lm_name,
             max_len=args.inv_max_len,
+            train_cap=args.inv_train_cap      
         )
+
         safe_write_csv(os.path.join(out_dir, "metrics_inversion_gpt2.csv"),
                        [{"bleu": inv_res["bleu"], "rougeL": inv_res["rougeL"], "bertF1": inv_res["bertF1"]}])
         safe_write_csv(os.path.join(out_dir, "inversion_gpt2_examples.csv"), inv_res["examples"])
@@ -135,6 +137,9 @@ def main():
     ap.add_argument("--prefix-len", type=int, default=64)
     ap.add_argument("--lm-name", type=str, default="gpt2")
     ap.add_argument("--inv-max-len", type=int, default=64)
+    ap.add_argument("--inv-batch", type=int, default=16)
+    ap.add_argument("--inv-train-cap", type=int, default=1200) 
+
 
     args = ap.parse_args()
 
