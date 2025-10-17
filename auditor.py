@@ -8,9 +8,28 @@ from utils import ensure_dir, cosine_sim_matrix, add_gaussian_noise, quantize, t
 
 class EmbeddingBackend:
     def __init__(self, model_name="sentence-transformers/all-MiniLM-L6-v2", device=None):
+        from sentence_transformers import SentenceTransformer
         self.model = SentenceTransformer(model_name, device=device)
-    def encode(self, texts: List[str], batch_size: int = 64) -> np.ndarray:
-        return self.model.encode(texts, batch_size=batch_size, convert_to_numpy=True, normalize_embeddings=False).astype('float32')
+
+    def encode(self, texts, batch_size: int = 64) -> np.ndarray:
+        import numpy as np
+        # Normalize input type
+        if isinstance(texts, str):
+            texts = [texts]
+        if not texts:
+            # Return empty (0, dim) safely
+            dim = self.model.get_sentence_embedding_dimension()
+            return np.zeros((0, dim), dtype="float32")
+        emb = self.model.encode(
+            texts,
+            batch_size=batch_size,
+            convert_to_numpy=True,
+            normalize_embeddings=False,
+            show_progress_bar=False,
+        )
+        emb = np.asarray(emb, dtype="float32")
+        emb = np.atleast_2d(emb)  # enforce 2-D
+        return emb
 
 class LeakAuditor:
     def __init__(self, save_dir: str, model_name: str = "sentence-transformers/all-MiniLM-L6-v2", device=None):
