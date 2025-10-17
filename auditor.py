@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
 from utils import ensure_dir, cosine_sim_matrix, add_gaussian_noise, quantize, topk_indices, mrr_at_k, hit_at_k, safe_write_csv
+from inversion import train_prefix_decoder, DEVICE
 
 class EmbeddingBackend:
     def __init__(self, model_name="sentence-transformers/all-MiniLM-L6-v2", device=None):
@@ -126,3 +127,60 @@ class LeakAuditor:
             bleu = sentence_bleu([ref.split()], recon.split(), weights=(1.0,0,0,0), smoothing_function=cc.method1)
             rows.append({"i": i, "reconstruction": recon[:200], "bleu1": float(bleu)})
         return rows
+    def gpt2_inversion(self,
+                    corpus_texts: List[str],
+                    corpus_emb,
+                    queries_texts: List[str],
+                    queries_emb,
+                    prefix_len: int = 64,
+                    epochs: int = 8,
+                    bs: int = 64,
+                    lm_name: str = "gpt2",
+                    max_len: int = 64) -> Dict[str, Any]:
+        # Train on a subset for speed
+        N = min(3000, len(corpus_texts))
+        model = train_prefix_decoder(
+            corpus_texts[:N],
+            corpus_emb[:N],
+            lm_name=lm_name,
+            embed_dim=corpus_emb.shape[1],
+            prefix_len=prefix_len,
+            epochs=epochs,
+            bs=bs,
+            max_len=max_len
+        )
+        # Evaluate on present queries (strongest leakage)
+        def _norm(s): return " ".join(s.lower().split())
+        bucket = {_norm(t): True for t in corpus_texts}
+        present_idx = [i for i,q in enumerate(queries_texts) if _norm(q) in bucket]
+
+        import numpy as np
+        q_eval_vecs  = queries_emb[present_idx] if present_idx else queries_emb[:min(64, len(queries_emb))]
+        q_eval_texts = [queries_texts[i] for i in present_idx] if present_idx else queries_texts[:min(64, len(queries_texts))]
+
+        with torch.no_grad():
+            preds = model.generate(torch.tensor(q_eval_vecs, dtype=torch.float32, device=DEVICE),
+                                max_len=max_len, min_len=12, temperature=0.9, top_k=40, top_p=0.9)
+
+        # Metrics: BLEU-1, ROUGE-L, BERTScore-F1
+        from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+        from rouge_score import rouge_scorer
+        import bert_score
+
+        cc = SmoothingFunction()
+        bleu = float(np.mean([sentence_bleu([r.split()], p.split(), weights=(1,0,0,0), smoothing_function=cc.method1) for p,r in zip(preds, q_eval_texts)]))
+
+        rs = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
+        rougeL = float(np.mean([rs.score(r, p)["rougeL"].fmeasure for p,r in zip(preds, q_eval_texts)]))
+
+        P, R, F1 = bert_score.score(preds, q_eval_texts, lang="en", verbose=False)
+        bertF1 = float(F1.mean().item())
+
+        # Return rows and small preview
+        rows = []
+        for i,(p,r) in enumerate(zip(preds, q_eval_texts)):
+            rows.append({"i": i, "ref": r, "gen": p})
+        return {
+            "bleu": bleu, "rougeL": rougeL, "bertF1": bertF1,
+            "examples": rows
+        }
