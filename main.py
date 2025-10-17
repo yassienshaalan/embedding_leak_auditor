@@ -56,7 +56,7 @@ def run_one(name: str, args):
     safe_write_csv(os.path.join(out_dir, "neighbors_top5.csv"), rows)
 
     # External queries
-    ex = ela_datasets.external_queries_for(name)
+    ex = external_queries_for(name)
     if ex:
         ex_emb = auditor.backend.encode(ex)
         ex_sim = cosine_sim_matrix(ex_emb, corpus_emb)
