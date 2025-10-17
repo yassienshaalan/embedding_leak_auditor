@@ -20,6 +20,9 @@ def run_one(name: str, args):
     out_dir = os.path.join("results", name); ensure_dir(out_dir)
     loader = get_loader(name)
     corpus, queries = loader(corpus_size=args.corpus_size, query_size=args.query_size, seed=args.seed)
+    if len(corpus) == 0 or len(queries) == 0:
+        raise RuntimeError(f"{name}: got empty corpus ({len(corpus)}) or queries ({len(queries)}). "
+                       f"Try smaller sizes or check dataset availability.")
 
     # make half the queries exact duplicates for membership testing
     dup_n = min(len(queries)//2, len(corpus)//4)

@@ -11,24 +11,17 @@ class EmbeddingBackend:
         from sentence_transformers import SentenceTransformer
         self.model = SentenceTransformer(model_name, device=device)
 
-    def encode(self, texts, batch_size: int = 64) -> np.ndarray:
+    def encode(self, texts, batch_size: int = 64):
         import numpy as np
-        # Normalize input type
         if isinstance(texts, str):
             texts = [texts]
         if not texts:
-            # Return empty (0, dim) safely
             dim = self.model.get_sentence_embedding_dimension()
             return np.zeros((0, dim), dtype="float32")
-        emb = self.model.encode(
-            texts,
-            batch_size=batch_size,
-            convert_to_numpy=True,
-            normalize_embeddings=False,
-            show_progress_bar=False,
-        )
+        emb = self.model.encode(texts, batch_size=batch_size, convert_to_numpy=True,
+                                normalize_embeddings=False, show_progress_bar=False)
         emb = np.asarray(emb, dtype="float32")
-        emb = np.atleast_2d(emb)  # enforce 2-D
+        emb = np.atleast_2d(emb)
         return emb
 
 class LeakAuditor:
@@ -69,11 +62,22 @@ class LeakAuditor:
                 rows.append({"sigma":s,"qbits":qb, **m})
         return rows
 
-    def cosine_hist_plot(self, sim: np.ndarray, labels_present: list, out_path: str):
+    def cosine_hist_plot(self, sim, labels_present, out_path: str):
         import numpy as np
         import matplotlib.pyplot as plt
 
+        # Handle empty similarity matrix safely
+        if sim is None or sim.size == 0 or sim.shape[0] == 0:
+            plt.figure(figsize=(6, 4))
+            plt.text(0.5, 0.5, "No queries to plot", ha="center", va="center", fontsize=12)
+            plt.axis("off")
+            plt.savefig(out_path, bbox_inches="tight", dpi=200)
+            plt.close()
+            return
+
+        # Row-wise maxima (one per query)
         max_cos = sim.max(axis=1)
+
         present = np.array([max_cos[i] for i, flag in enumerate(labels_present) if flag], dtype=float)
         absent  = np.array([max_cos[i] for i, flag in enumerate(labels_present) if not flag], dtype=float)
 
@@ -84,15 +88,13 @@ class LeakAuditor:
                 return
             lo = float(np.nanmin(data))
             hi = float(np.nanmax(data))
-            # Guard against zero or tiny range
             if not np.isfinite(lo) or not np.isfinite(hi):
                 return
             if hi - lo < 1e-6:
                 pad = 1e-3
                 lo -= pad
                 hi += pad
-            # Choose a sensible bin count for small samples
-            bins = max(1, min(30, int(np.ceil(np.sqrt(data.size)))))
+            bins = max(1, min(30, int(np.ceil(np.sqrt(max(1, data.size))))))
             plt.hist(data, bins=bins, range=(lo, hi), alpha=0.6, density=True, label=label)
 
         plot_group(present, "Present")
@@ -101,10 +103,10 @@ class LeakAuditor:
         plt.xlabel("Max cosine to corpus")
         plt.ylabel("Density")
         plt.title("Cosine separation")
-        plt.legend()
+        if present.size or absent.size:
+            plt.legend()
         plt.savefig(out_path, bbox_inches="tight", dpi=200)
         plt.close()
-
 
     def line_plot(self, xs, ys_dict: Dict[str, List[float]], xlabel, ylabel, title, out_path):
         plt.figure(figsize=(6,4))

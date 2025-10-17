@@ -4,17 +4,11 @@ from typing import List, Dict, Any, Tuple
 def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
 
-def cosine_sim_matrix(A: np.ndarray, B: np.ndarray) -> np.ndarray:
+def cosine_sim_matrix(A, B):
     import numpy as np
-    A = np.asarray(A, dtype="float32")
-    B = np.asarray(B, dtype="float32")
-    # Ensure 2D
-    A = np.atleast_2d(A)
-    B = np.atleast_2d(B)
-    if A.ndim != 2 or B.ndim != 2:
-        raise ValueError(f"Embeddings must be 2D, got A:{A.shape} B:{B.shape}")
+    A = np.asarray(A, dtype="float32"); B = np.asarray(B, dtype="float32")
+    A = np.atleast_2d(A); B = np.atleast_2d(B)
     if A.size == 0 or B.size == 0:
-        # Return a well-shaped empty similarity matrix
         return np.zeros((A.shape[0], B.shape[0]), dtype="float32")
     A = A / (np.linalg.norm(A, axis=1, keepdims=True) + 1e-12)
     B = B / (np.linalg.norm(B, axis=1, keepdims=True) + 1e-12)
