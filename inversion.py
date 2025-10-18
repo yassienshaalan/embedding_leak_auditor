@@ -80,62 +80,88 @@ class PrefixDecoder(nn.Module):
 
     @torch.no_grad()
     def generate(self,
-                 evecs: torch.Tensor,
-                 max_len: int = 64,
-                 min_len: int = 12,
-                 temperature: float = 0.9,
-                 top_k: int = 40,
-                 top_p: float = 0.90,
-                 repetition_penalty: float = 1.2) -> List[str]:
+                evecs: torch.Tensor,
+                max_len: int = 64,
+                min_len: int = 12,
+                temperature: float = 0.9,
+                top_k: int = 40,
+                top_p: float = 0.90,
+                repetition_penalty: float = 1.2) -> list[str]:
 
+        import torch
         B = evecs.size(0)
-        prefix = self.make_prefix(evecs)             # [B,P,H]
-        # start from BOS (we'll use eos as bos for GPT-2)
-        bos = torch.full((B, 1), self.tok.eos_token_id, dtype=torch.long, device=evecs.device)
-        cur = self.lm.transformer.wte(bos)           # [B,1,H]
-        seq_ids = [[] for _ in range(B)]
-        last = None
-        past = None
+        prefix = self.make_prefix(evecs)                      # [B,P,H]
 
-        # prime the cache with prefix
+        # Prime KV-cache with prefix
         out = self.lm(inputs_embeds=prefix, use_cache=True)
         past = out.past_key_values
+
+        # start token (GPT-2 has no BOS; reuse EOS)
+        bos = torch.full((B, 1), self.tok.eos_token_id, dtype=torch.long, device=evecs.device)
+        cur = self.lm.transformer.wte(bos)                    # [B,1,H]
+        seq_ids = [[] for _ in range(B)]
+
+        def _renorm_or_fallback(probs_row, logits_row, k):
+            """Ensure a valid distribution; if empty after filtering, soften."""
+            s = probs_row.sum()
+            if torch.isnan(s) or s <= 1e-12:
+                # fallback: softmax on raw logits (no filtering), slightly higher temp
+                q = torch.softmax(logits_row / max(temperature, 0.5), dim=-1)
+                s2 = q.sum()
+                if s2 <= 1e-12 or torch.isnan(s2):
+                    # last resort: uniform over top-k vocab
+                    tk = min(max(k, 10), logits_row.numel())
+                    _, idx = torch.topk(logits_row, k=tk)
+                    q = torch.zeros_like(logits_row)
+                    q.scatter_(0, idx, 1.0 / tk)
+                return q
+            return probs_row / (s + 1e-8)
 
         for t in range(max_len):
             out = self.lm(inputs_embeds=cur, use_cache=True, past_key_values=past)
             past = out.past_key_values
-            logits = out.logits[:, -1, :] / max(1e-6, temperature)
+            logits = out.logits[:, -1, :]
 
-            # repetition penalty
+            # temperature + repetition penalty
+            logits = logits / max(temperature, 1e-6)
             if repetition_penalty != 1.0:
                 for b in range(B):
                     for tok_id in seq_ids[b][-8:]:
                         logits[b, tok_id] /= repetition_penalty
 
+            # base probs
             probs = torch.softmax(logits, dim=-1)
 
-            # top-k / nucleus
+            # top-k
             if top_k and top_k > 0:
-                top_probs, top_idx = torch.topk(probs, k=min(top_k, probs.size(-1)))
-                probs = torch.zeros_like(probs).scatter_(1, top_idx, top_probs)
+                tk = min(top_k, probs.size(-1))
+                top_probs, top_idx = torch.topk(probs, k=tk, dim=-1)
+                mask = torch.zeros_like(probs).scatter_(1, top_idx, 1.0)
+                probs = probs * mask
+
+            # nucleus (top-p)
             if 0 < top_p < 1:
                 sp, si = torch.sort(probs, dim=-1, descending=True)
-                c = torch.cumsum(sp, dim=-1)
-                mask = c > top_p
-                sp = torch.where(mask, torch.zeros_like(sp), sp)
+                cdf = torch.cumsum(sp, dim=-1)
+                keep = cdf <= top_p
+                # always keep the first token
+                keep[:, 0] = True
+                sp = sp * keep
                 probs = torch.zeros_like(probs).scatter_(1, si, sp)
-                probs = probs / (probs.sum(dim=-1, keepdim=True) + 1e-8)
+
+            # per-row renorm + fallback
+            for b in range(B):
+                probs[b] = _renorm_or_fallback(probs[b], logits[b], top_k or 50)
 
             nxt = torch.multinomial(probs, 1).squeeze(1)
 
-            # avoid early EOS
+            # avoid very early EOS
             for b in range(B):
                 if t < min_len and nxt[b].item() == self.tok.eos_token_id:
-                    # pick next best
-                    p = probs[b].clone()
-                    p[self.tok.eos_token_id] = 0
-                    p = p / (p.sum() + 1e-8)
-                    nxt[b] = torch.multinomial(p, 1)
+                    q = probs[b].clone()
+                    q[self.tok.eos_token_id] = 0
+                    q = q / (q.sum() + 1e-8)
+                    nxt[b] = torch.multinomial(q, 1)
 
             for b in range(B):
                 seq_ids[b].append(int(nxt[b]))
@@ -143,7 +169,7 @@ class PrefixDecoder(nn.Module):
             cur = self.lm.transformer.wte(nxt).unsqueeze(1)
 
         outs = [self.tok.decode(row, skip_special_tokens=True) for row in seq_ids]
-        return [_clean_text(x) for x in outs]
+        return [re.sub(r'([^\w\s])\1{2,}', r'\1\1', o).strip() for o in outs]
 
 class InvDataset(Dataset):
     def __init__(self, texts: List[str], evecs, tokenizer, max_len=64):
@@ -181,6 +207,9 @@ def train_prefix_decoder(
         torch_dtype=torch_dtype,
         low_cpu_mem_usage=True
     )
+    if torch.cuda.is_available():
+        model.lm.to(torch.float32)  # safer sampling; training can still be fp16
+
     model.lm.resize_token_embeddings(len(model.tok))
     if torch.cuda.is_available():
         model.lm.to(DEVICE)
