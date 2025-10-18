@@ -14,11 +14,11 @@ Yet, embeddings also carry *latent memory* of their training data.
 **ELA** provides a structured, empirical way to measure this memory, transforming abstract privacy concerns into actionable metrics.
 
 **Core Capabilities:**
--  **Membership leakage** – Can someone tell if a text was part of your dataset?
--  **Semantic inversion** – Can embeddings be decoded back to readable text?
--  **Privacy–utility frontier** – How much can we perturb embeddings before breaking their usefulness?
--  **Cross-domain evaluation** – Works across news, biomedical, and financial text.
--  **Visualization** – Generates retrieval, inversion, and defense impact plots.
+-  **Membership leakage**: Can someone tell if a text was part of your dataset?
+-  **Semantic inversion**: Can embeddings be decoded back to readable text?
+-  **Privacy–utility frontier**: How much can we perturb embeddings before breaking their usefulness?
+-  **Cross-domain evaluation**: Works across news, biomedical, and financial text.
+-  **Visualization**: Generates retrieval, inversion, and defense impact plots.
 
 ---
 
