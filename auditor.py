@@ -137,14 +137,16 @@ class LeakAuditor:
                    bs: int = 16,
                    lm_name: str = "gpt2",
                    max_len: int = 64,
-                   train_cap: int = 1200):
+                   train_cap: int = 1200,
+                   logger=None):
         from inversion import train_prefix_decoder, DEVICE
         import numpy as np
         import torch
         from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
         from rouge_score import rouge_scorer
         import bert_score
-
+        if logger: 
+            logger.info(f"[INV] Train subset N={min(train_cap, len(corpus_texts))}, bs={bs}, max_len={max_len}")
         # Train on a capped subset (memory-friendly)
         N = min(train_cap, len(corpus_texts), len(corpus_emb))
         model = train_prefix_decoder(

@@ -1,5 +1,6 @@
 # main.py
 import argparse, os, numpy as np
+import logging, sys
 
 from utils import ensure_dir, safe_write_csv, cosine_sim_matrix, topk_indices
 from auditor import LeakAuditor
@@ -16,10 +17,28 @@ def get_loader(name):
         "pubmed_rct": load_pubmed_rct,
         "financial_phrasebank": load_financial_phrasebank,
     }[name]
+def setup_logger(name: str, log_file: str):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    # clear old handlers if any
+    for h in list(logger.handlers):
+        logger.removeHandler(h)
+    fmt = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+    # file handler
+    fh = logging.FileHandler(log_file)
+    fh.setFormatter(fmt); fh.setLevel(logging.INFO)
+    logger.addHandler(fh)
+    # console handler
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(fmt); ch.setLevel(logging.INFO)
+    logger.addHandler(ch)
+    return logger
 
 def run_one(name: str, args):
     out_dir = os.path.join("results", name)
     ensure_dir(out_dir)
+    logger = setup_logger(f"ELA.{name}", os.path.join(out_dir, "run.log"))
+    logger.info(f"[RUN] DATASET={name} | model={args.model_name} | corpus={args.corpus_size} | queries={args.query_size}")
 
     loader = get_loader(name)
     corpus, queries = loader(
@@ -104,6 +123,7 @@ def run_one(name: str, args):
     # Optional GPT-2 inversion
     if getattr(args, "enable_gpt2_inversion", False):
         print(f"[INV] Training GPT-2 inversion (lm={args.lm_name}, epochs={args.inv_epochs}, prefix_len={args.prefix_len})")
+        logger.info(f"[INV] Training GPT-2 inversion (lm={args.lm_name}, epochs={args.inv_epochs}, prefix_len={args.prefix_len})")
         inv_res = auditor.gpt2_inversion(
             corpus_texts=corpus,
             corpus_emb=corpus_emb,
@@ -120,7 +140,7 @@ def run_one(name: str, args):
                        [{"bleu": inv_res["bleu"], "rougeL": inv_res["rougeL"], "bertF1": inv_res["bertF1"]}])
         safe_write_csv(os.path.join(out_dir, "inversion_gpt2_examples.csv"), inv_res["examples"])
         print(f"[INV] GPT-2 inversion -> BLEU={inv_res['bleu']:.2f} ROUGE-L={inv_res['rougeL']:.3f} BERT-F1={inv_res['bertF1']:.3f}")
-
+        logger.info(f"[INV] GPT-2 inversion -> BLEU={inv_res['bleu']:.2f} ROUGE-L={inv_res['rougeL']:.3f} BERT-F1={inv_res['bertF1']:.3f}")
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", choices=["ag_news", "pubmed_rct", "financial_phrasebank"])
