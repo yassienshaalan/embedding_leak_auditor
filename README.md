@@ -138,7 +138,18 @@ This means:
 
  Privacy posture: High risk without defenses.
 
-Adding New Datasets
+Example Commands Summary
+### Run everything (with inversion)
+python3 main.py --all --enable-gpt2-inversion --lm-name gpt2-medium --inv-epochs 20
+
+### Run retrieval-only
+python3 main.py --dataset ag_news
+
+### Run inversion with smaller corpus
+python3 main.py --dataset financial_phrasebank --corpus-size 800 --query-size 200 --inv-epochs 10
+
+
+Adding New Datasets:
 
 To extend ELA, modify ela_datasets.py:
 ```bash
@@ -165,11 +176,45 @@ Differential Privacy (future)	Formal privacy guarantees	Strong protection, high 
 
 You can visualize this through the privacy–utility frontier curves automatically generated in each run.
 
-Citation
+##  Work in Progress: Toward a Plug-and-Play Library
 
-If you use this work in research or publications:
+The Embedding Leak Auditor (ELA) is currently provided as a research-grade toolkit with standalone scripts for running full leakage experiments.
+We are actively working to refactor it into a lightweight, installable Python package that integrates easily into your ML workflow.
 
-Towards datascience article 
+🔜 Coming Soon:
+Install and start auditing in one line.
+```bash
+pip install eleak-auditor 
+```
+###  High-level API:
+```bash
+from leak_auditor import ELA
+
+auditor = ELA(model="all-MiniLM-L6-v2")
+report = auditor.run("ag_news")
+report.summary()
+```
+
+### Modular components for:
+
+*** Retrieval leak detection
+
+*** Embedding inversion analysis
+
+*** Privacy–utility frontier plots
+
+*** Pluggable defenses (noise, quantization, rotation)
+
+*** Seamless integration with Hugging Face, LangChain, and enterprise vector stores.
+
+### Goal
+
+To make privacy auditing as easy and standard as model evaluation — so teams can measure, visualize, and mitigate embedding leakage with minimal setup.
+
+## Citation
+
+Medium article 
+
 
  License
 
@@ -178,18 +223,7 @@ Free for research and non-commercial use with attribution.
 
 Acknowledgments
 
-Developed as part of ongoing research into embedding security, governance, and generative model transparency.
+Developed as part of personal ongoing research into embedding security, governance, and generative model transparency.
 Inspired by investigations into membership inference, representation learning, and generative privacy boundaries.
-```bash
-Example Commands Summary
-# Run everything (with inversion)
-python3 main.py --all --enable-gpt2-inversion --lm-name gpt2-medium --inv-epochs 20
-
-# Run retrieval-only
-python3 main.py --dataset ag_news
-
-# Run inversion with smaller corpus
-python3 main.py --dataset financial_phrasebank --corpus-size 800 --query-size 200 --inv-epochs 10
-```
 
  If this work helps your research or product, please star the repository and share feedback.
