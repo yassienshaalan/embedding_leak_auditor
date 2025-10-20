@@ -1,3 +1,4 @@
+# Core
 datasets>=2.19.0
 sentence-transformers>=3.0.1
 torch>=2.2.0
@@ -5,9 +6,20 @@ numpy>=1.26.0
 matplotlib>=3.8.0
 scikit-learn>=1.3.0
 nltk>=3.8.1
+
+# Similarity index (CPU by default; use faiss-gpu on CUDA boxes)
 faiss-cpu>=1.8.0.post1 ; platform_machine != "arm64"
-faiss-cpu==1.7.4 ; platform_machine == "arm64"
+faiss-cpu==1.7.4       ; platform_machine == "arm64"
+# faiss-gpu            # OPTIONAL: install this instead of faiss-cpu on CUDA machines
+
+# Inversion & eval
 transformers>=4.43.0
 accelerate>=0.33.0
 rouge-score>=0.1.2
 bert-score>=0.3.13
+safetensors>=0.4.2
+
+# I/O & performance helpers
+pyarrow>=12.0.0
+pandas>=2.0.0
+tqdm>=4.66.0
