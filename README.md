@@ -214,7 +214,7 @@ To make privacy auditing as easy and standard as model evaluation — so teams c
 ## Citation
 
 Medium article:
-https://statics.teams.cdn.office.net/evergreen-assets/safelinks/2/atp-safelinks.html
+https://medium.com/@yassien/embeddings-privacy-and-the-leak-auditor-auditing-the-hidden-memory-of-ai-2e7c78339ad9
 
  License
 
