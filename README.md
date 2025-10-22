@@ -213,8 +213,8 @@ To make privacy auditing as easy and standard as model evaluation — so teams c
 
 ## Citation
 
-Medium article 
-
+Medium article:
+https://statics.teams.cdn.office.net/evergreen-assets/safelinks/2/atp-safelinks.html
 
  License
 
